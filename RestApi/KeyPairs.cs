@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace InfoSec.RestApi
 {
@@ -70,7 +71,7 @@ namespace InfoSec.RestApi
         }
 
         #endregion
-        
+
         #region Получение публичного ключа
 
         [Authorize]
@@ -126,9 +127,10 @@ namespace InfoSec.RestApi
         {
             var publicKey = dto.PublicKey.ToByteArray();
             var privateKey = dto.PrivateKey.ToByteArray();
-            
+
             // Todo: проверить ключи на соответствие друг другу
-            
+
+
             var pair = new KeyPair
             {
                 Id = Guid.NewGuid(),
@@ -157,12 +159,24 @@ namespace InfoSec.RestApi
         [HttpPost("Create")]
         public async Task<IActionResult> Create()
         {
-            // Todo: Сгенерировать пару ключей
-            throw new NotImplementedException();
+            var PrimeNumbers = SieveEratosthenes(1000);
+            Random rnd = new Random();
+            var p = PrimeNumbers.ElementAt(rnd.Next() % PrimeNumbers.Count());
+            var q = PrimeNumbers.ElementAt(rnd.Next() % PrimeNumbers.Count());
+            var n = p * q; //надо передавать вместе с открыты ключом
+            var EulerFunction = (p - 1) * (q - 1);
 
-            var publicKey = Encoding.UTF8.GetBytes("Some public key");
-            var privateKey = Encoding.UTF8.GetBytes("Some private key");
-            
+            //генерация открытого ключа
+            int e = rnd.Next(3, Convert.ToInt32(EulerFunction - 1));
+            while (GetNOD(e, Convert.ToInt32(EulerFunction)) != 1)
+            {
+                e = rnd.Next(3, Convert.ToInt32(EulerFunction - 1));
+            }
+            var publicKey = Encoding.UTF8.GetBytes(e);
+
+            //генерация закрытого ключа
+            var privateKey = Encoding.UTF8.GetBytes(GetPrivateKey(e, Convert.ToInt32(EulerFunction)));
+
             var pair = new KeyPair
             {
                 Id = Guid.NewGuid(),
@@ -224,19 +238,19 @@ namespace InfoSec.RestApi
 
             var file = dto.File.ToByteArray();
             var sign = dto.SignFile.ToByteArray();
-            
+
             // Todo: Проверить подпись
             throw new NotImplementedException();
 
             var singIsValid = true;
-            
+
             return Ok(singIsValid);
         }
 
         #endregion
 
         #region Подписывание
-        
+
         [Authorize]
         [HttpPost("Sign")]
         [Consumes("multipart/form-data")]
@@ -251,10 +265,11 @@ namespace InfoSec.RestApi
                 return NotFound($"Key pair with id {dto.KeyPairId} not found for you");
 
             var file = dto.File.ToByteArray();
-            
+            // На вход должена поступать хэш-функция сообщения
             // Todo: Сгенерировать подпись
-            throw new NotImplementedException();
             
+            throw new NotImplementedException();
+
             // Сгенерированную подпись нужно преобразовать в
             // массив байт для отправки
             byte[] signFile = Encoding.UTF8.GetBytes("Trust me");
@@ -263,7 +278,71 @@ namespace InfoSec.RestApi
                 "text/plain",
                 $"{dto.File.Name}.sig");
         }
-        
+
         #endregion
+        static List<uint> SieveEratosthenes(uint n)
+        {
+            var numbers = new List<uint>();
+            //заполнение списка числами от 2 до n-1
+            for (var i = 2u; i < n; i++)
+            {
+                numbers.Add(i);
+            }
+
+            for (var i = 0; i < numbers.Count; i++)
+            {
+                for (var j = 2u; j < n; j++)
+                {
+                    //удаляем кратные числа из списка
+                    numbers.Remove(numbers[i] * j);
+                }
+            }
+            return numbers;
+        }
+
+        static int Min(int x, int y)
+        {
+            return x < y ? x : y;
+        }
+
+        static int Max(int x, int y)
+        {
+            return x > y ? x : y;
+        }
+
+        static int GetNOD(int a, int b)
+        {
+            if (a == 0)
+            {
+                return b;
+            }
+            else
+            {
+                var min = Min(a, b);
+                var max = Max(a, b);
+                //вызываем метод с новыми аргументами
+                return GetNOD (max % min, min);
+            }
+        }
+
+        static int GetPrivateKey(int a, int m)
+        {
+            int u1 = m;
+            int u2 = 0;
+            int v1 = a;
+            int v2 = 1;
+            while (v1 != 0)
+            {
+                int q = u1 / v1;
+                int t1 = u1 - q * v1;
+                int t2 = u2 - q * v2;
+                u1 = v1;
+                u2 = v2;
+                v1 = t1;
+                v2 = t2;
+            }
+
+            return (u2 + EulerFunction) % EulerFunction;
+        }
     }
 }
