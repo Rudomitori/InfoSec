@@ -7,7 +7,7 @@ namespace InfoSec.RestApi.Dtos.Input
     public class CheckSignDto
     {
         [BindRequired] public IFormFile File { get; set; }
-        [BindRequired] public IFormFile SignFile { get; set; }
+        [BindRequired] public byte[] Sign { get; set; }
         // Не знаю, достаточно ли будет файла с подписью,
         // чтобы получить из базы нужный публичный ключ,
         // поэтому проще явно указывать, какой ключ нужен

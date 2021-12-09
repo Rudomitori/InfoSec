@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,5 +20,9 @@ namespace InfoSec.RestApi
             using var reader = new BinaryReader(stream);
             return reader.ReadBytes((int) formFile.Length);
         }
+
+        public static byte[] ToByteArray(this string str) => Encoding.UTF8.GetBytes(str);
+
+        public static string ToBase64(this byte[] array) => Convert.ToBase64String(array);
     }
 }

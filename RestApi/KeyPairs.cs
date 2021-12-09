@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
@@ -65,9 +67,7 @@ namespace InfoSec.RestApi
             if (keyPair is null)
                 return NotFound($"Key pair with id {id} not found for you");
 
-            return File(keyPair.PrivateKey,
-                "text/plain",
-                $"{keyPair.Name}.ppk");
+            return Ok(keyPair.PrivateKey.ToBase64());
         }
 
         #endregion
@@ -86,9 +86,7 @@ namespace InfoSec.RestApi
             if (keyPair is null)
                 return NotFound($"Key pair with id {id} not found for you");
 
-            return File(keyPair.PublicKey,
-                "text/plain",
-                $"{keyPair.Name}.pub");
+            return Ok(keyPair.PublicKey.ToBase64());
         }
 
         #endregion
@@ -122,21 +120,16 @@ namespace InfoSec.RestApi
 
         [Authorize]
         [HttpPost]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> Post([FromForm] AddKeyPairDto dto)
+        public async Task<IActionResult> Post(AddKeyPairDto dto)
         {
-            var publicKey = dto.PublicKey.ToByteArray();
-            var privateKey = dto.PrivateKey.ToByteArray();
-
             // Todo: проверить ключи на соответствие друг другу
-
 
             var pair = new KeyPair
             {
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
-                PublicKey = publicKey,
-                PrivateKey = privateKey,
+                PublicKey = dto.PublicKey,
+                PrivateKey = dto.PrivateKey,
                 OwnerId = this.GetUserId()
             };
 
@@ -159,23 +152,21 @@ namespace InfoSec.RestApi
         [HttpPost("Create")]
         public async Task<IActionResult> Create()
         {
-            var PrimeNumbers = SieveEratosthenes(1000);
-            Random rnd = new Random();
-            var p = PrimeNumbers.ElementAt(rnd.Next() % PrimeNumbers.Count());
-            var q = PrimeNumbers.ElementAt(rnd.Next() % PrimeNumbers.Count());
+            var primeNumbers = SieveEratosthenes(1000);
+            var rnd = new Random();
+            var p = primeNumbers.ElementAt(rnd.Next() % primeNumbers.Count);
+            var q = primeNumbers.ElementAt(rnd.Next() % primeNumbers.Count);
             var n = p * q; //надо передавать вместе с открыты ключом
-            var EulerFunction = (p - 1) * (q - 1);
-
+            var eulerFunction = (p - 1) * (q - 1);
+            
             //генерация открытого ключа
-            int e = rnd.Next(3, Convert.ToInt32(EulerFunction - 1));
-            while (GetNOD(e, Convert.ToInt32(EulerFunction)) != 1)
-            {
-                e = rnd.Next(3, Convert.ToInt32(EulerFunction - 1));
-            }
-            var publicKey = Encoding.UTF8.GetBytes(e);
+            var e = (uint) rnd.NextInt64(3, eulerFunction - 1);
+            while (GetNod(e, eulerFunction) != 1) 
+                e = (uint) rnd.NextInt64(3, eulerFunction - 1);
+            var publicKey = BitConverter.GetBytes(e);
 
             //генерация закрытого ключа
-            var privateKey = Encoding.UTF8.GetBytes(GetPrivateKey(e, Convert.ToInt32(EulerFunction)));
+            var privateKey = BitConverter.GetBytes(GetPrivateKey(e, eulerFunction));
 
             var pair = new KeyPair
             {
@@ -237,7 +228,7 @@ namespace InfoSec.RestApi
                 return NotFound($"Key pair with id {dto.KeyPairId} not found for you");
 
             var file = dto.File.ToByteArray();
-            var sign = dto.SignFile.ToByteArray();
+            var sign = dto.Sign;
 
             // Todo: Проверить подпись
             throw new NotImplementedException();
@@ -280,7 +271,8 @@ namespace InfoSec.RestApi
         }
 
         #endregion
-        static List<uint> SieveEratosthenes(uint n)
+
+        private static List<uint> SieveEratosthenes(uint n)
         {
             var numbers = new List<uint>();
             //заполнение списка числами от 2 до n-1
@@ -300,49 +292,34 @@ namespace InfoSec.RestApi
             return numbers;
         }
 
-        static int Min(int x, int y)
+        private static uint GetNod(uint a, uint b)
         {
-            return x < y ? x : y;
+            if (a == 0) return b;
+
+            var min = Math.Min(a, b);
+            var max = Math.Max(a, b);
+            //вызываем метод с новыми аргументами
+            return GetNod(max % min, min);
         }
 
-        static int Max(int x, int y)
+        private static uint GetPrivateKey(uint a, uint m)
         {
-            return x > y ? x : y;
-        }
-
-        static int GetNOD(int a, int b)
-        {
-            if (a == 0)
-            {
-                return b;
-            }
-            else
-            {
-                var min = Min(a, b);
-                var max = Max(a, b);
-                //вызываем метод с новыми аргументами
-                return GetNOD (max % min, min);
-            }
-        }
-
-        static int GetPrivateKey(int a, int m)
-        {
-            int u1 = m;
-            int u2 = 0;
-            int v1 = a;
-            int v2 = 1;
+            var u1 = m;
+            var u2 = 0u;
+            var v1 = a;
+            var v2 = 1u;
             while (v1 != 0)
             {
-                int q = u1 / v1;
-                int t1 = u1 - q * v1;
-                int t2 = u2 - q * v2;
+                var q = u1 / v1;
+                var t1 = u1 - q * v1;
+                var t2 = u2 - q * v2;
                 u1 = v1;
                 u2 = v2;
                 v1 = t1;
                 v2 = t2;
             }
 
-            return (u2 + EulerFunction) % EulerFunction;
+            return (u2 + m) % m;
         }
     }
 }
