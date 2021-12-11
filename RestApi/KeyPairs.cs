@@ -156,7 +156,7 @@ namespace InfoSec.RestApi
             var rnd = new Random();
             var p = primeNumbers.ElementAt(rnd.Next() % primeNumbers.Count);
             var q = primeNumbers.ElementAt(rnd.Next() % primeNumbers.Count);
-            var n = p * q; //надо передавать вместе с открыты ключом
+            var number = BitConverter.GetBytes(p*q);
             var eulerFunction = (p - 1) * (q - 1);
             
             //генерация открытого ключа
@@ -174,6 +174,7 @@ namespace InfoSec.RestApi
                 Name = $"New key pair.{DateTime.UtcNow}",
                 PublicKey = publicKey,
                 PrivateKey = privateKey,
+                N = number ,
                 OwnerId = this.GetUserId()
             };
 
@@ -227,13 +228,20 @@ namespace InfoSec.RestApi
             if (keyPair is null)
                 return NotFound($"Key pair with id {dto.KeyPairId} not found for you");
 
-            var file = dto.File.ToByteArray();
+            var file = dto.File.ToByteArray(); //тут нужен хэш, который алиса создала из полученного документа, я назвала его alicaHash
             var sign = dto.Sign;
 
             // Todo: Проверить подпись
+            var publicKey = BitConverter.ToInt32(keyPair.publicKey);
+            var N = BitConverter.ToUInt32(keyPair.N);
+            var sing = BitConverter.ToUInt32(keyPair.signFile); //возможно не правильно вызываю подпись
+            long bobHash = binpow(sing, publicKey, N);
             throw new NotImplementedException();
-
-            var singIsValid = true;
+            if (bobHash == alicaHash)
+            {
+                var singIsValid = true;
+            }
+            
 
             return Ok(singIsValid);
         }
@@ -258,12 +266,18 @@ namespace InfoSec.RestApi
             var file = dto.File.ToByteArray();
             // На вход должена поступать хэш-функция сообщения
             // Todo: Сгенерировать подпись
-            
+            long m = 56784; //воображаемый хэш
+            var file = BitConverter.GetBytes(m);
+            var hashFunction = BitConverter.ToInt32(file);//заменить на хэш, который сгенирировал Боб, но хэш должен быть не больше 99999
+            var privateKey = BitConverter.ToInt32(keyPair.privateKey);
+            var N = BitConverter.ToUInt32(keyPair.N);
+            long sign = binpow(hashFunction, privateKey, N);
+
             throw new NotImplementedException();
 
             // Сгенерированную подпись нужно преобразовать в
             // массив байт для отправки
-            byte[] signFile = Encoding.UTF8.GetBytes("Trust me");
+            byte[] signFile = BitConverter.GetBytes(sign);
 
             return File(signFile,
                 "text/plain",
@@ -320,6 +334,18 @@ namespace InfoSec.RestApi
             }
 
             return (u2 + m) % m;
+        }
+
+        private static long binpow (long a, long n, long m)
+        {
+            if (n == 0)
+                return 1 % m;
+            if (n % 2 == 1)
+                return (binpow(a, n - 1, m) * a) % m;
+            else
+            {
+                return binpow((a * a) % m, n / 2, m);
+            }
         }
     }
 }
