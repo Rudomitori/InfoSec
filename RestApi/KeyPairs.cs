@@ -160,9 +160,9 @@ namespace InfoSec.RestApi
             var eulerFunction = (p - 1) * (q - 1);
             
             //генерация открытого ключа
-            var e = (uint) rnd.NextInt64(3, eulerFunction - 1);
+            var e = (uint) rnd.Next(3, (int) eulerFunction - 1);
             while (GetNod(e, eulerFunction) != 1) 
-                e = (uint) rnd.NextInt64(3, eulerFunction - 1);
+                e = (uint) rnd.Next(3, (int) eulerFunction - 1);
             var publicKey = new PublicKey {E = BitConverter.GetBytes(e), N = number};
 
             //генерация закрытого ключа
