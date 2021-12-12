@@ -86,7 +86,7 @@ namespace InfoSec.RestApi
             if (keyPair is null)
                 return NotFound($"Key pair with id {id} not found for you");
 
-            return Ok(keyPair.PublicKey.ToBase64());
+            return Ok(keyPair.PublicKey);
         }
 
         #endregion
@@ -163,7 +163,7 @@ namespace InfoSec.RestApi
             var e = (uint) rnd.NextInt64(3, eulerFunction - 1);
             while (GetNod(e, eulerFunction) != 1) 
                 e = (uint) rnd.NextInt64(3, eulerFunction - 1);
-            var publicKey = BitConverter.GetBytes(e);
+            var publicKey = new PublicKey {E = BitConverter.GetBytes(e), N = number};
 
             //генерация закрытого ключа
             var privateKey = BitConverter.GetBytes(GetPrivateKey(e, eulerFunction));
@@ -174,7 +174,6 @@ namespace InfoSec.RestApi
                 Name = $"New key pair.{DateTime.UtcNow}",
                 PublicKey = publicKey,
                 PrivateKey = privateKey,
-                N = number ,
                 OwnerId = this.GetUserId()
             };
 
@@ -220,28 +219,24 @@ namespace InfoSec.RestApi
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> CheckSign([FromForm] CheckSignDto dto)
         {
-            var currentUserId = this.GetUserId();
-
             var keyPair = await _dbContext.KeyPairs
-                .FirstOrDefaultAsync(x => x.Id == dto.KeyPairId && x.OwnerId == currentUserId);
+                .FirstOrDefaultAsync(x => x.Id == dto.KeyPairId);
 
             if (keyPair is null)
-                return NotFound($"Key pair with id {dto.KeyPairId} not found for you");
+                return NotFound($"Key pair with id {dto.KeyPairId} not found");
 
-            var file = dto.File.ToByteArray(); //тут нужен хэш, который алиса создала из полученного документа, я назвала его alicaHash
-            var sign = dto.Sign;
+            var file = dto.File.ToByteArray();
+            byte[] tmpHashA;
+            tmpHashA = new MD5CryptoServiceProvider().ComputeHash(file);
+            var alicaHash = BitConverter.ToUInt16(tmpHashA);//хэш, который сгенирировала Алиса из полученного документа
 
-            // Todo: Проверить подпись
-            var publicKey = BitConverter.ToInt32(keyPair.publicKey);
-            var N = BitConverter.ToUInt32(keyPair.N);
-            var sing = BitConverter.ToUInt32(keyPair.signFile); //возможно не правильно вызываю подпись
-            long bobHash = binpow(sing, publicKey, N);
-            throw new NotImplementedException();
-            if (bobHash == alicaHash)
-            {
-                var singIsValid = true;
-            }
-            
+            //Проверить подпись
+            var e = BitConverter.ToUInt32(keyPair.PublicKey.E);
+            var N = BitConverter.ToUInt32(keyPair.PublicKey.N);
+            var sing = BitConverter.ToUInt64(dto.Sign); //возможно не правильно вызываю подпись
+            var bobHash = binpow(sing, e, N);
+
+            var singIsValid = bobHash == alicaHash;
 
             return Ok(singIsValid);
         }
@@ -252,7 +247,7 @@ namespace InfoSec.RestApi
 
         [Authorize]
         [HttpPost("Sign")]
-        [Consumes("multipart/form-data")]
+        //[Consumes("multipart/form-data")]
         public async Task<IActionResult> Sign([FromForm] SignDto dto)
         {
             var currentUserId = this.GetUserId();
@@ -262,26 +257,16 @@ namespace InfoSec.RestApi
 
             if (keyPair is null)
                 return NotFound($"Key pair with id {dto.KeyPairId} not found for you");
-
+            
             var file = dto.File.ToByteArray();
-            // На вход должена поступать хэш-функция сообщения
-            // Todo: Сгенерировать подпись
-            long m = 56784; //воображаемый хэш
-            var file = BitConverter.GetBytes(m);
-            var hashFunction = BitConverter.ToInt32(file);//заменить на хэш, который сгенирировал Боб, но хэш должен быть не больше 99999
-            var privateKey = BitConverter.ToInt32(keyPair.privateKey);
-            var N = BitConverter.ToUInt32(keyPair.N);
-            long sign = binpow(hashFunction, privateKey, N);
+            byte[] tmpHashB = new MD5CryptoServiceProvider().ComputeHash(file);
 
-            throw new NotImplementedException();
+            var hashFunction = BitConverter.ToUInt16(tmpHashB);//хэш, который сгенирировал Боб
+            var privateKey = BitConverter.ToUInt32(keyPair.PrivateKey);
+            var N = BitConverter.ToUInt32(keyPair.PublicKey.N);
+            var sign = binpow(hashFunction, privateKey, N);
 
-            // Сгенерированную подпись нужно преобразовать в
-            // массив байт для отправки
-            byte[] signFile = BitConverter.GetBytes(sign);
-
-            return File(signFile,
-                "text/plain",
-                $"{dto.File.Name}.sig");
+            return Ok(BitConverter.GetBytes(sign));
         }
 
         #endregion
@@ -336,7 +321,7 @@ namespace InfoSec.RestApi
             return (u2 + m) % m;
         }
 
-        private static long binpow (long a, long n, long m)
+        private static ulong binpow (ulong a, ulong n, ulong m)
         {
             if (n == 0)
                 return 1 % m;

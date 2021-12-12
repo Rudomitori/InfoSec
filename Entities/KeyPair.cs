@@ -7,7 +7,7 @@ namespace InfoSec.Entities
     {
         public Guid Id { get; set; }
         [Required] public string Name { get; set; }
-        [Required] public byte[] PublicKey { get; set; }
+        [Required] public PublicKey PublicKey { get; set; }
         [Required] public byte[] PrivateKey { get; set; }
         
         public Guid OwnerId { get; set; }
